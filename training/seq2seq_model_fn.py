@@ -428,11 +428,14 @@ class ModelFn(object):
     return accuracy.item()
 
   def validation_srnn_ms(self, sample, decoder_pred):
-    # the data was flatened from a sequence of size 
+    # the data was flatened from a sequence of size
     # [n_actions, n_seeds, target_length, pose_size]
+    print(sample.keys())
     n_actions = len(self._params['action_subset'])
-    seq_shape = (n_actions, self._params['eval_num_seeds'], 
+    seq_shape = (n_actions, self._params['eval_num_seeds'],
         self._params['target_seq_len'], self._params['pose_dim'])
+    # seq_shape = (1, self._params['eval_num_seeds'],
+    #              self._params['target_seq_len'], self._params['pose_dim'])
     srnn_gts_euler = sample['decoder_outputs_euler']
     decoder_pred_ = decoder_pred.cpu().numpy()
     decoder_pred_ = decoder_pred_.reshape(seq_shape)
@@ -451,22 +454,24 @@ class ModelFn(object):
 
       # a list or a vector of length n_seeds
       # each entry of: shape seq_len x complete_pose_dim (H36M == 99)
-      srnn_pred_euler = self._eval_dataset_fn.dataset.post_process_to_euler(decoder_pred) 
+      srnn_pred_euler = self._eval_dataset_fn.dataset.post_process_to_euler(decoder_pred)
 
       # n_seeds x seq_len
-      mean_errors = np.zeros((self._params['eval_num_seeds'], 
+      mean_errors = np.zeros((self._params['eval_num_seeds'],
           self._params['target_seq_len']))
 
       # Training is done in exponential map or rotation matrix or quaternion
-      # but the error is reported in Euler angles, as in previous work [3,4,5] 
+      # but the error is reported in Euler angles, as in previous work [3,4,5]
       for i in np.arange(self._params['eval_num_seeds']):
         # seq_len x complete_pose_dim (H36M==99)
         eulerchannels_pred = srnn_pred_euler[i]
 
         # n_seeds x seq_len x complete_pose_dim (H36M==96)
         action_gt = srnn_gts_euler[action]
+        # print(action_gt.shape)
         # seq_len x complete_pose_dim (H36M==96)
-        gt_i = np.copy(action_gt.squeeze()[i].numpy())
+        gt_i = np.copy(action_gt.squeeze(0)[i].numpy())
+        # print(gt_i.shape)
         # Only remove global rotation. Global translation was removed before
         gt_i[:, 0:3] = 0
 
@@ -500,14 +505,21 @@ class ModelFn(object):
         continue
       sample[k] = sample[k].squeeze().to(_DEVICE)
 
+    # decoder_pred = []
+    # for action_idx, action in enumerate(sample['actions']):
+    #   decoder_pred.append(self._model(
+    #     sample['encoder_inputs'][action_idx], sample['decoder_inputs'][action_idx]))
+
     decoder_pred = self._model(
         sample['encoder_inputs'], sample['decoder_inputs'])
+    # print(decoder_pred[-1].shape)
+    # print(decoder_pred[-1])
 
     selection_loss = None
     if self._params['query_selection']:
       prob_mat = decoder_pred[-1][-1]
       selection_loss = self.compute_selection_loss(
-          inputs=prob_mat, 
+          inputs=prob_mat,
           target=sample['src_tgt_distance']
       )
 
@@ -525,8 +537,11 @@ class ModelFn(object):
         class_gt=gt_class
     )
 
+    # print(decoder_pred.shape)
     # [batch_size, sequence_length, pose_dim]
+    decoder_pred_ = decoder_pred[-1]
     decoder_pred = decoder_pred[0][-1]
+    # print(decoder_pred.shape)
     # [batch_size, sequence_length, pose_dim]
     msre_ = decoder_pred-sample['decoder_outputs']
     # [batch_size, sequence_length]
@@ -534,9 +549,9 @@ class ModelFn(object):
     msre_ = msre_.mean().item()
 
     eval_loss = (srnn_loss, activity_loss, accuracy) \
-        if self._params['predict_activity'] else srnn_loss 
+        if self._params['predict_activity'] else srnn_loss
     # run validation on different ranges
-    mean_eval_error_dict = self.validation_srnn_ms(sample, decoder_pred)
+    mean_eval_error_dict = self.validation_srnn_ms(sample, decoder_pred_)
 
     self._scalars['ms_eval_loss'] = mean_eval_error_dict
     self._scalars['msre'] = msre_
@@ -796,7 +811,7 @@ if __name__ == '__main__':
 
   train_dataset_fn, eval_dataset_fn = dataset_factory(params)
 
-  model_fn = Seq2SeqModelFn(
+  model_fn = ModelFn(
     params, 
     train_dataset_fn=train_dataset_fn, 
     eval_dataset_fn=eval_dataset_fn

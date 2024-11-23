@@ -28,11 +28,11 @@ Proposed in 'Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour'.
 Adapted from https://github.com/ildoonet/pytorch-gradual-warmup-lr/blob/master/warmup_scheduler/scheduler.py
 """
 
-from torch.optim.lr_scheduler import _LRScheduler
+from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 
-class GradualWarmupScheduler(_LRScheduler):
+class GradualWarmupScheduler(LRScheduler):
   """ Gradually warm-up(increasing) learning rate in optimizer."""
   def __init__(self, optimizer, multiplier, total_epoch, after_scheduler=None):
     """Constructor.
